@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TIMEFORMAT="Время выполнения - %lR"
+TIMEFORMAT="Time elapsed - %lR"
 
 case "$1" in
     1)
@@ -10,7 +10,7 @@ case "$1" in
         FILE="1/main.go"
         ;;
     *)
-        echo "Неверный аргумент. Укажите 1 или 2."
+        echo "Invalid argument. Specify 1 or 2."
         exit 1
         ;;
 esac

@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+const FILE = "data/m9.txt"
 const BATCH_SIZE = 10000
 
 var wg sync.WaitGroup
@@ -62,17 +63,19 @@ func findSeparator(s string) int {
 func processBatch(batch []string, localMap map[string]stats) {
 	for _, text := range batch {
 		sepIndex := findSeparator(text)
-		firstSegment := text[:sepIndex]
-		secondSegment := text[sepIndex+1:]
-		num := parseInt(secondSegment)
-		name := firstSegment
+		num := parseInt(text[sepIndex+1:])
+		name := text[:sepIndex]
 
 		v, ok := localMap[name]
 		if !ok {
 			localMap[name] = stats{min: num, max: num, sum: num, count: 1}
 		} else {
-			v.min = min(v.min, num)
-			v.max = max(v.max, num)
+			if num < v.min {
+				v.min = num
+			}
+			if num > v.max {
+				v.max = num
+			}
 			v.sum += num
 			v.count++
 			localMap[name] = v
@@ -85,8 +88,12 @@ func mergeMaps(globalMap, localMap map[string]stats) {
 	defer mx.Unlock()
 	for k, v := range localMap {
 		if globalV, ok := globalMap[k]; ok {
-			globalV.min = min(v.min, globalV.min)
-			globalV.max = max(v.max, globalV.max)
+			if v.min < globalV.min {
+				globalV.min = v.min
+			}
+			if v.max > globalV.max {
+				globalV.max = v.max
+			}
 			globalV.count += v.count
 			globalV.sum += v.sum
 			globalMap[k] = globalV
@@ -96,7 +103,14 @@ func mergeMaps(globalMap, localMap map[string]stats) {
 	}
 }
 
+var batchPool = sync.Pool{
+	New: func() interface{} {
+		return make([]string, 0, BATCH_SIZE)
+	},
+}
+
 func main() {
+	runtime.GOMAXPROCS(4)
 	start := time.Now()
 
 	cpuProfile, err := os.Create("cpu.prof")
@@ -112,7 +126,7 @@ func main() {
 	}
 	defer pprof.StopCPUProfile()
 
-	f, err := os.Open("data/m9.txt")
+	f, err := os.Open(FILE)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -121,7 +135,7 @@ func main() {
 	scanner := bufio.NewScanner(bufio.NewReaderSize(f, 16*1024*1024))
 
 	globalMap := make(map[string]stats)
-	batch := make([]string, 0, BATCH_SIZE)
+	batch := batchPool.Get().([]string)
 	lineCount := 0
 
 	for scanner.Scan() {
@@ -135,10 +149,10 @@ func main() {
 				defer wg.Done()
 				processBatch(batch, localMap)
 				mergeMaps(globalMap, localMap)
+				batchPool.Put(batch[:0])
 			}(batch)
 			lineCount = 0
-			batch = nil
-			batch = make([]string, 0, BATCH_SIZE)
+			batch = batchPool.Get().([]string)
 		}
 	}
 	wg.Wait()
@@ -167,5 +181,5 @@ func main() {
 		fmt.Println("Error writing memory profile:", err)
 	}
 
-	fmt.Println("\nTime elapsed:", time.Since(start), "count lines:", lineCount)
+	fmt.Println("\nTime elapsed:", time.Since(start), "\nLines remain:", lineCount)
 }
