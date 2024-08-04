@@ -1,0 +1,8 @@
+*.prof
+*.svg
+*.pdf
+myenv
+data/*.txt
+0
+.DS_Store
+*/.DS_Store
